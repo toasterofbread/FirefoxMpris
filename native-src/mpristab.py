@@ -1,116 +1,214 @@
-import mpris_server as MP
-from mpris_server.base import URI, MIME_TYPES
-from mpris_server.adapters import MprisAdapter, PlayState
-from mpris_server.events import EventAdapter as MprisEventAdapter
-from mpris_server.server import Server as MprisServer
-from typing import List
-import json
+from spectre7.mprisserver import *
+import inspect
 
-class MprisTab(MprisAdapter):
+def name():
+    return inspect.stack()[1][3]
 
-    def createServer(self):
-        self.server = MprisServer(self.server_name, adapter=self)
-        self.server.publish()
-        # event_handler = EventHandler(root=server.root, player=server.player)
-        self.server.loop()
-
-    def get_uri_schemes(self) -> List[str]:
-        return URI
-
-    def get_mime_types(self) -> List[str]:
-        return MIME_TYPES
-
-    def can_quit(self) -> bool:
-        return True
-
-    def quit(self):
-        return ""
+class MprisTab(MprisServer, MprisMainInterface):
     
-    def get_current_position(self):
-        return 0
+    def __init__(self, name: str):
+        super().__init__(name)
+        self.setMainInterface(self)
 
-    def next(self):
-        return ""
+    def setProperty(self, property: str, value: any):
+        self.api.sendMessage({"type": "mpris_set", "tab": self.id, "property": property, "value": value})
+
+    def callMethod(self, method: str, args: list[any] = []):
+        self.api.sendMessage({"type": "mpris_method", "tab": self.id, "method": method, "args": args})
+
+    PLAYBACK_STATUS = ("Stopped", "Paused", "Playing")
+    PROPERTIES = {
+        "status": int,
+        "position": float | int,
+        "duration": float | int,
+        "url": str,
+        "fullscreen": bool,
+        "track_loop": bool,
+        "playlist_loop": bool,
+        "is_playlist": bool,
+        "playback_speed": float | int,
+        "shuffle": bool,
+        "volume": float
+    }
+
+    CanQuit = True
+    CanRaise = True
+    CanSetFullscreen = True
+    HasTrackList = True
+    Identity = ""
+    DesktopEntry = ""
+    SupportedUriSchemes = ["file"]
+    SupportedMimeTypes = ["audio/mpeg", "application/ogg", "video/mpeg"]
+
+    def Raise(self):
+        self.callMethod(name())
+
+    def Quit(self):
+        self.callMethod(name())
+
+    @property
+    def Fullscreen(self):
+        return self.fullscreen
+
+    @Fullscreen.setter
+    def Fullscreen(self, value: bool):
+        self.setProperty(name(), value)
+
+class PlayerInterface(MprisPlayerInterface):
+
+    def __init__(self, tab: MprisTab):
+        self.tab = tab
+
+    @property
+    def Metadata(self) -> dict:
+        ret = {
+            "mpris:trackid": "/track/1",
+            "mpris:length": self.tab.duration * self.TIME_UNIT,
+            "mpris:artUrl": "Example",
+            "xesam:url": self.tab.url,
+            "xesam:title": "Example title",
+            "xesam:album": "Album name",
+            "xesam:discNumber": None,
+            "xesam:trackNumber": None,
+            "xesam:artist": [],
+            "xesam:albumArtist": [],
+            "xesam:comment": [],
+        }
+        self.formatMetadata(ret)
+        return ret
     
-    def previous(self):
-        return ""
+    MinimumRate = 1.0
+    MaximumRate = 1.0
+
+    def PlayPause(self):
+        self.tab.callMethod(name())
+
+    def Play(self):
+        if not self.CanPlay:
+            return
+        self.tab.callMethod(name())
     
-    def pause(self):
-        print("pause")
-        return ""
-    
-    def resume(self):
-        print("resume")
-        return ""
-    
-    def stop(self):
-        return ""
-    
-    def play(self):
-        return ""
-        
-    def get_playstate(self) -> PlayState:
-        # return PlayState.STOPPED
-        # return PlayState.PAUSED
-        return PlayState.PLAYING
+    def Pause(self):
+        if not self.CanPause:
+            return
+        self.tab.callMethod(name())
 
-    def seek(self, time):
-        return ""
+    def Stop(self):
+        if not self.CanControl:
+            return
+        self.tab.callMethod(name())
 
-    def is_repeating(self) -> bool:
-        return False
+    def Next(self):
+        if not self.CanGoNext:
+            return
+        self.tab.callMethod(name())
 
-    def is_playlist(self) -> bool:
-        return False
+    def Previous(self):
+        if not self.CanGoPrevious:
+            return
+        self.tab.callMethod(name())
 
-    def set_repeating(self, val: bool):
-        return ""
+    def Seek(self, offset: int):
+        if not self.CanSeek:
+            return
+        self.tab.callMethod(name(), [offset])
 
-    def set_loop_status(self, val: str):
-        return ""
+    def SetPosition(self, track_id: str, position: int):
+        if not self.CanSeek:
+            return
+        self.tab.callMethod(name(), [track_id, position])
 
-    def get_rate(self) -> float:
-        return 1.0
+    def OpenUri(self, uri: str):
+        if not self.CanControl:
+            return
+        self.tab.callMethod(name(), [uri])
 
-    def set_rate(self, val: float):
-        return ""
+    @property
+    def PlaybackStatus(self) -> str: # -> "Playing" | "Paused" | "Stopped"
+        return self.tab.PLAYBACK_STATUS[self.tab.status]
 
-    def get_shuffle(self) -> bool:
-        return False
-
-    def set_shuffle(self, val: bool):
-        return False
-
-    def get_art_url(self, track):
+    @property
+    def LoopStatus(self) -> str: # -> "Track" | "Playlist" | "None"
+        if self.tab.track_loop:
+            return "Track"
+        elif self.tab.playlist_loop:
+            return "Playlist"
         return "None"
 
-    def get_stream_title(self):
-        return "None"
+    @LoopStatus.setter
+    def LoopStatus(self, value: str): # value: "Track" | "Playlist" | "None"
+        if not self.CanControl:
+            return
+        self.tab.setProperty(name(), value)
 
-    def is_mute(self) -> bool:
-        return False
+    @property
+    def Rate(self) -> float:
+        return self.tab.playback_speed
 
-    def can_go_next(self) -> bool:
-        return False
+    @Rate.setter
+    def Rate(self, value: float):
+        if not self.CanControl:
+            return
+        self.tab.setProperty(name(), value)
 
-    def can_go_previous(self) -> bool:
-        return  False
+    @property
+    def Shuffle(self) -> bool:
+        return self.tab.shuffle
 
-    def can_play(self) -> bool:
+    @Shuffle.setter
+    def Shuffle(self, value: bool):
+        if not self.CanControl:
+            return
+        self.tab.setProperty(name(), value)
+
+    @property
+    def Volume(self) -> float:
+        return self.tab.volume
+
+    @Volume.setter
+    def Volume(self, value: float):
+        if not self.CanControl:
+            return
+        self.tab.setProperty(name(), value)
+
+    @property
+    def Position(self):
+        return self.tab.position * self.TIME_UNIT
+
+    @property
+    def CanGoNext(self) -> bool:
+        if not self.CanControl:
+            return False
         return True
 
-    def can_pause(self) -> bool:
+    @property
+    def CanGoPrevious(self) -> bool:
+        if not self.CanControl:
+            return False
         return True
 
-    def can_seek(self) -> bool:
-        return False
-
-    def can_control(self) -> bool:
+    @property
+    def CanPlay(self) -> bool:
+        if not self.CanControl:
+            return False
         return True
 
-    def get_stream_title(self) -> str:
-        return "Test title"
+    @property
+    def CanPause(self) -> bool:
+        if not self.CanControl:
+            return False
+        return True
 
-class EventHandler(MprisEventAdapter):
-    def on_app_event(self, event: str):
-        print(f"Event received: {event}")
+    @property
+    def CanSeek(self) -> bool:
+        if not self.CanControl:
+            return False
+        return True
+
+    @property
+    def CanControl(self) -> bool:
+        return True
+
+class TrackInterface(MprisTrackInterface):
+    def __init__(self, tab: MprisTab):
+        self.tab = tab
