@@ -1,13 +1,11 @@
 #!/usr/bin/python3
 
-from typing import Any
+import json
 import notify2
+from typing import Any
 from spectre7.browserapi import BrowserAPI
 from mpristab import MprisTab
 from urllib.parse import urlparse, parse_qs
-
-class Tab:
-    pass
 
 api = BrowserAPI()
 tabs = {}
@@ -47,8 +45,7 @@ def onMessageRecieved(event):
                 else:
                     tab = Tab(tab_id)
                     tabs[tab_id] = tab
-                
-            
+
             case "set_property":
 
                 if not event["tab"] in tabs:
@@ -63,11 +60,12 @@ def onMessageRecieved(event):
 
 class Tab(MprisTab):
 
-    PROPERTIES = ("playing", "position", "duration")
+    PROPERTIES = ("playing", "position", "duration", "url")
 
     playing = False
     position = 0
     duration = 0
+    url = ""
 
     def __init__(self, tab_id: int):
         self.id = tab_id
@@ -85,11 +83,28 @@ class Tab(MprisTab):
         for key in Tab.PROPERTIES:
             setattr(self, key, response[key])
         
+        notify(self.url)
         # api.sendMessage({"type": "log", "response": response})
     
-    def setProperty(self, name: str, value: Any):
-        notify(value, name)
+    def setProperty(self, key: str, value: Any):
+        assert(key in Tab.PROPERTIES)
+        setattr(key, value)
 
+    def metadata(self):
+        return {
+            "mpris:trackid": "/track/1",
+            "mpris:length": self.duration,
+            "mpris:artUrl": "Example",
+            "xesam:url": self.url,
+            "xesam:title": "Example title",
+            "xesam:artist": [],
+            "xesam:album": "Album name",
+            "xesam:albumArtist": [],
+            "xesam:discNumber": 1,
+            "xesam:trackNumber": 1,
+            "xesam:comment": [json.dumps({
+            })],
+        }
 
 if __name__ == "__main__":
     notify2.init("firefoxmpris")

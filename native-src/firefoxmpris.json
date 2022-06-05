@@ -1,0 +1,7 @@
+{
+  "name": "firefoxmpris",
+  "description": "",
+  "path": "PATH_TO_EXTENSION/native-src/mpris.py",
+  "type": "stdio",
+  "allowed_extensions": ["firefoxmpris@spectreseven1138.github.com"]
+}

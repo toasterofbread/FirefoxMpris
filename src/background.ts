@@ -1,3 +1,18 @@
+import { YoutubeProtocol } from "./protocols/youtube.js";
+
+const PROTOCOLS = [
+  YoutubeProtocol
+];
+
+async function getTabProtocol(tabId: any) {
+  for (let protocol of PROTOCOLS) {
+    if (await protocol.supportsTab(tabId)) {
+      return protocol;
+    }
+  }
+  return null;
+}
+
 let port = browser.runtime.connectNative("firefoxmpris");
 port.onMessage.addListener(onMessageReceived);
 
@@ -5,7 +20,8 @@ class VideoProperties {
   PLAYING = "playing";
 };
 
-async function runCode(code, tabId, args = []) {
+export async function runCode(code: CallableFunction, tabId: number, args: any[] = []) {
+  // @ts-expect-error
   let result = (await browser.scripting.executeScript({
     target: {
       tabId: tabId
@@ -21,7 +37,26 @@ async function runCode(code, tabId, args = []) {
   return result.result;
 }
 
-async function onMessageReceived(message) {
+function sendMessage(message: any) {
+  message = JSON.stringify(message);
+  try {
+    console.log("SENDING MESSAGE: ", message);
+    port.postMessage(message);
+  }
+  catch (err) {
+    console.log(err);
+  }
+}
+
+function emitEvent(type: string, data: any) {
+  let object: any = {"type": type};
+  Object.keys(data).forEach(key => {
+    object[key] = data[key];
+  })
+  sendMessage(object);
+}
+
+async function onMessageReceived(message: any) {
   let type = message.type;
 
   console.log("MESSAGE RECEIVED: ", message);
@@ -33,7 +68,7 @@ async function onMessageReceived(message) {
 
     case "play": {
       await runCode(() => {
-        document.querySelector("video").play()
+        document.querySelector("video")?.play()
       }, message.tab);
       break;
     }
@@ -41,15 +76,18 @@ async function onMessageReceived(message) {
     case "get_status": {
 
       let result = await runCode(() => {
-        let result = {};
-        let video = document.querySelector("video");
+        let result: any = {};
 
+        const video: HTMLMediaElement = document.querySelector("video")!;
         result.playing = !video.paused;
         result.position = video.currentTime;
         result.duration = video.duration;
 
         return result;
       }, message.tab);
+
+      const tab = await browser.tabs.get(message.tab);
+      // result.url = tab.url;
 
       emitEvent("response", result);
       break;
@@ -61,28 +99,10 @@ async function onMessageReceived(message) {
   }
 }
 
-function sendMessage(message) {
-  try {
-    port.postMessage(message);
-    console.log("MESSAGE SENT: ", message);
-  }
-  catch (err) {
-    console.log(err);
-  }
-}
-
-function emitEvent(type, data) {
-  let object = {"type": type};
-  Object.keys(data).forEach(key => {
-    object[key] = data[key];
-  })
-  sendMessage(JSON.stringify(object));
-}
-
-function onTabUpdated(tabId, changeInfo) {
+function onTabUpdated(tabId: number, changeInfo: any) {
   emitEvent("tab_changed", {"tab": tabId, "url": changeInfo.url});
 
-  runCode((tabId, extensionId, Properties) => {
+  runCode((tabId: number, extensionId: string, Properties: VideoProperties) => {
     let video = document.querySelector("video");
     if (!video) {
       return;
@@ -102,12 +122,12 @@ function onTabUpdated(tabId, changeInfo) {
   }, tabId, [tabId, browser.runtime.id, new VideoProperties])
 }
 
-function onTabDeleted(tabId) {
+function onTabDeleted(tabId: number) {
   emitEvent("tab_closed", {"tab": tabId});
 }
 
-function onTabConnected(port) {
-  port.onMessage.addListener(event => {
+function onTabConnected(port: browser.runtime.Port) {
+  port.onMessage.addListener((event: any) => {
     emitEvent("set_property", event);
   })
 }
@@ -117,6 +137,7 @@ const filter = {
   properties: ["url"]
 };
 
+// @ts-expect-error
 browser.tabs.onUpdated.addListener(onTabUpdated, filter);
 browser.tabs.onRemoved.addListener(onTabDeleted);
 
@@ -124,21 +145,20 @@ browser.runtime.onConnect.addListener(onTabConnected);
 
 browser.windows.getAll({populate: true}).then(async windows => {
   for (let window of windows) {
-    for (let tab of window.tabs) {
+    for (let tab of window.tabs!) {
         if (tab.discarded) {
           continue;
         }
 
-        if (!tab.url.startsWith("https://www.youtube.com/watch?")) {
+        const protocol = await getTabProtocol(tab);
+        console.log(protocol);
+        continue;
+
+        if (!protocol) {
           continue;
         }
 
-        const video_exists = await runCode(() => {return document.querySelector("video") != null}, tab.id);
-        if (!video_exists) {
-          continue;
-        }
-
-        onTabUpdated(tab.id, {"url": tab.url});
+        onTabUpdated(tab.id!, {"url": tab.url});
     }
   }
 })

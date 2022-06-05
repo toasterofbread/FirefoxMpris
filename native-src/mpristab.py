@@ -14,23 +14,6 @@ class MprisTab(MprisAdapter):
         # event_handler = EventHandler(root=server.root, player=server.player)
         self.server.loop()
 
-    def metadata(self) -> MP.ValidMetadata:
-        return {
-            "mpris:trackid": "/track/1",
-            "mpris:length": 0,
-            "mpris:artUrl": "Example",
-            "xesam:url": "https://google.com",
-            "xesam:title": "Example title",
-            "xesam:artist": [],
-            "xesam:album": "Album name",
-            "xesam:albumArtist": [],
-            "xesam:discNumber": 1,
-            "xesam:trackNumber": 1,
-            "xesam:comment": [json.dumps({
-                
-            })],
-        }
-
     def get_uri_schemes(self) -> List[str]:
         return URI
 
