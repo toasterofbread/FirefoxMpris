@@ -17,19 +17,43 @@ async function getTabProtocol(tab: browser.tabs.Tab): Promise<typeof Protocol | 
 let port = browser.runtime.connectNative("firefoxmpris");
 port.onMessage.addListener(onMessageReceived);
 
-class VideoProperties {
+class VProperties {
 	STATUS = "status";
-	POSITION = "position";
-	DURATION = "duration";
-	URL = "url";
 	FULLSCREEN = "fullscreen";
-	TRACK_LOOP = "track_loop";
-	PLAYLIST_LOOP = "playlist_loop";
+	LOOP = "loop";
 	IS_PLAYLIST = "is_playlist";
-	PLAYBACK_SPEED = "playback_speed";
 	SHUFFLE = "shuffle";
 	VOLUME = "volume";
+	POSITION = "position";
+	PLAYBACK_RATE = "playback_rate";
+	TRACK_ID = "track_id";
+	DURATION = "duration";
+	ART_URL = "art_url";
+	URL = "url";
+	TITLE = "title";
+	ALBUM_NAME = "album_name";
+	DISC_NUMBER = "disc_number";
+	TRACK_NUMBER = "track_number";
+	ARTISTS = "artists";
+	ALBUM_ARTISTS = "album_artists";
+	COMMENTS = "comments";
+
+	CANQUIT = "CanQuit";
+	CANRAISE = "CanRaise";
+	CANSETFULLSCREEN = "CanSetFullscreen";
+	IDENTITY = "Identity";
+	DESKTOPENTRY = "DesktopEntry";
+	SUPPORTEDURISCHEMES = "SupportedUriSchemes";
+	SUPPORTEDMIMETYPES = "SupportedMimeTypes";
+
+	CAN_GO_NEXT = "can_go_next";
+	CAN_GO_PREVIOUS = "can_go_previous";
+	CAN_PLAY = "can_play";
+	CAN_PAUSE = "can_pause";
+	CAN_SEEK = "can_seek";
+	CAN_CONTROL = "can_control";
 };
+export const VideoProperties = new VProperties;
 
 export async function runCode(code: CallableFunction, tabId: number, args: any[] = []) {
 	// @ts-expect-error
@@ -40,6 +64,10 @@ export async function runCode(code: CallableFunction, tabId: number, args: any[]
 		func: code,
 		args: args
 	}))[0];
+
+	if (!result) {
+		return null;
+	}
 
 	if (result.error) {
 		throw result.error;
@@ -93,41 +121,8 @@ async function onMessageReceived(message: any) {
 		}
 
 		case "get_status": {
-
-/*
-    PROPERTIES = {
-        "status": int,
-        "position": int,
-        "duration": int,
-        "url": str,
-        "fullscreen": bool,
-        "track_loop": bool,
-        "playlist_loop": bool,
-        "is_playlist": bool,
-        "playback_speed": float,
-        "shuffle": bool,
-        "volume": float
-    }
-*/
-
-			let result = await runCode(() => {
-				const video: HTMLMediaElement = document.querySelector("video")!;
-			  	return {
-					"status": video.ended ? 0 : video.paused ? 1 : 2,
-					"position": video.currentTime,
-					"duration": video.duration,
-					"url": document.URL,
-					// @ts-expect-error
-					"fullscreen": Document.fullscreenElement == video,
-					"track_loop": video.loop,
-					"playlist_loop": false,
-					"is_playlist": false,
-					"playback_speed": video.playbackRate,
-					"shuffle": false,
-					"volume": video.volume
-				};
-			}, message.tab);
-
+			let result = await protocol?.getProperties();
+			result.tab = message.tab;
 			emitEvent("response", result);
 			break;
 		}
@@ -136,17 +131,22 @@ async function onMessageReceived(message: any) {
 			browser.tabs.update(message.tab, {active: true});
 			break;
 		}
-	
+
+		case "mpris_method": {
+			protocol?.callMethod(message.method, message.args);
+		}
+
 		default: {
 			break;
 		}
 	}
 }
 
-function onTabUpdated(tabId: number, changeInfo: any) {
-	emitEvent("tab_changed", {"tab": tabId, "url": changeInfo.url});
+async function onTabUpdated(tabId: number, changeInfo: any) {
 
-	runCode((tabId: number, extensionId: string, Properties: VideoProperties) => {
+	emitEvent("tab_changed", {"tab": tabId, "url": changeInfo.url, supported: await getTabProtocol(await browser.tabs.get(tabId)) != null});
+
+	runCode((tabId: number, extensionId: string, Properties: VProperties) => {
 		let video = document.querySelector("video");
 		if (!video) {
 			return;
@@ -165,7 +165,7 @@ function onTabUpdated(tabId: number, changeInfo: any) {
 			port.postMessage({key: Properties.STATUS, value: video.ended ? 0 : video.paused ? 1 : 2, tab: tabId});
 		})
 
-	}, tabId, [tabId, browser.runtime.id, new VideoProperties])
+	}, tabId, [tabId, browser.runtime.id, VideoProperties])
 }
 
 function onTabDeleted(tabId: number) {
@@ -174,17 +174,12 @@ function onTabDeleted(tabId: number) {
 
 function onTabConnected(port: browser.runtime.Port) {
 	port.onMessage.addListener((event: any) => {
-		emitEvent("update_property", event);
+		emitEvent("property_changed", event);
 	})
 }
 
-const filter = {
-	urls: ["https://www.youtube.com/watch?*"],
-	properties: ["url"]
-};
-
 // @ts-expect-error
-browser.tabs.onUpdated.addListener(onTabUpdated, filter);
+browser.tabs.onUpdated.addListener(onTabUpdated, {properties: ["url"]});
 browser.tabs.onRemoved.addListener(onTabDeleted);
 
 browser.runtime.onConnect.addListener(onTabConnected);
@@ -200,15 +195,6 @@ browser.windows.getAll({populate: true}).then(async windows => {
 				if (!protocol) {
 					continue;
 				}
-
-				// console.log(await runCode(() => {
-				// 	let el: HTMLElement = document.querySelector(".style-scope ytd-channel-name")!;
-				// 	el = el.querySelector(".style-scope yt-formatted-string")!;
-
-				// 	return el.innerText;
-
-				// }, tab.id!));
-				// return;
 
 				onTabUpdated(tab.id!, {"url": tab.url});
 		}

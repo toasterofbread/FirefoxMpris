@@ -16,29 +16,45 @@ class MprisTab(MprisServer, MprisMainInterface):
     def callMethod(self, method: str, args: list[any] = []):
         self.api.sendMessage({"type": "mpris_method", "tab": self.id, "method": method, "args": args})
 
-    PLAYBACK_STATUS = ("Stopped", "Paused", "Playing")
     PROPERTIES = {
-        "status": int,
-        "position": float | int,
-        "duration": float | int,
-        "url": str,
-        "fullscreen": bool,
-        "track_loop": bool,
-        "playlist_loop": bool,
-        "is_playlist": bool,
-        "playback_speed": float | int,
-        "shuffle": bool,
-        "volume": float
+        "status": [int, "PlaybackStatus"],
+        "fullscreen": [bool, "Fullscreen"],
+        "loop": [bool, "LoopStatus"],
+        "is_playlist": [bool, "LoopStatus"],
+        "shuffle": [bool, "Shuffle"],
+        "volume": [float, "Volume"],
+        "position": [float | int, "Position"],
+        "playback_rate": [float | int, "Rate"],
+
+        "track_id": [None | str, "Metadata"],
+        "duration": [None | float | int, "Metadata"],
+        "art_url": [None | str, "Metadata"],
+        "url": [None | str, "Metadata"],
+        "title": [None | str, "Metadata"],
+        "album_name": [None | str, "Metadata"],
+        "disc_number": [None | int, "Metadata"],
+        "track_number": [None | int, "Metadata"],
+        "artists": [None | list, "Metadata"],
+        "album_artists": [None | list, "Metadata"],
+        "comments": [None | list, "Metadata"],
+        
+        "CanQuit": [bool, "CanQuit"],
+        "CanRaise": [bool, "CanRaise"],
+        "CanSetFullscreen": [bool, "CanSetFullscreen"],
+        "Identity": [str, "Identity"],
+        "DesktopEntry": [str, "DesktopEntry"],
+        "SupportedUriSchemes": [list, "SupportedUriSchemes"],
+        "SupportedMimeTypes": [list, "SupportedMimeTypes"],
+
+        "can_go_next": [bool, "CanGoNext"],
+        "can_go_previous": [bool, "CanGoPrevious"],
+        "can_play": [bool, "CanPlay"],
+        "can_pause": [bool, "CanPause"],
+        "can_seek": [bool, "CanSeek"],
+        "can_control": [bool, "CanControl"],
     }
 
-    CanQuit = True
-    CanRaise = True
-    CanSetFullscreen = True
     HasTrackList = True
-    Identity = ""
-    DesktopEntry = ""
-    SupportedUriSchemes = ["file"]
-    SupportedMimeTypes = ["audio/mpeg", "application/ogg", "video/mpeg"]
 
     def Raise(self):
         self.callMethod(name())
@@ -62,17 +78,17 @@ class PlayerInterface(MprisPlayerInterface):
     @property
     def Metadata(self) -> dict:
         ret = {
-            "mpris:trackid": "/track/1",
+            "mpris:trackid": self.tab.track_id,
             "mpris:length": self.tab.duration * self.TIME_UNIT,
-            "mpris:artUrl": "Example",
+            "mpris:artUrl": self.tab.art_url,
             "xesam:url": self.tab.url,
-            "xesam:title": "Example title",
-            "xesam:album": "Album name",
-            "xesam:discNumber": None,
-            "xesam:trackNumber": None,
-            "xesam:artist": [],
-            "xesam:albumArtist": [],
-            "xesam:comment": [],
+            "xesam:title": self.tab.title,
+            "xesam:album": self.tab.album_name,
+            "xesam:discNumber": self.tab.disc_number,
+            "xesam:trackNumber": self.tab.track_number,
+            "xesam:artist": self.tab.artists,
+            "xesam:albumArtist": self.tab.album_artists,
+            "xesam:comment": self.tab.comments,
         }
         self.formatMetadata(ret)
         return ret
@@ -125,13 +141,14 @@ class PlayerInterface(MprisPlayerInterface):
 
     @property
     def PlaybackStatus(self) -> str: # -> "Playing" | "Paused" | "Stopped"
-        return self.tab.PLAYBACK_STATUS[self.tab.status]
+        # return ("Stopped", "Paused", "Playing")[self.tab.status]
+        return "Playing"
 
     @property
     def LoopStatus(self) -> str: # -> "Track" | "Playlist" | "None"
-        if self.tab.track_loop:
+        if self.tab.loop:
             return "Track"
-        elif self.tab.playlist_loop:
+        elif self.tab.is_playlist:
             return "Playlist"
         return "None"
 
@@ -143,7 +160,7 @@ class PlayerInterface(MprisPlayerInterface):
 
     @property
     def Rate(self) -> float:
-        return self.tab.playback_speed
+        return self.tab.playback_rate
 
     @Rate.setter
     def Rate(self, value: float):
@@ -172,42 +189,42 @@ class PlayerInterface(MprisPlayerInterface):
         self.tab.setProperty(name(), value)
 
     @property
-    def Position(self):
-        return self.tab.position * self.TIME_UNIT
+    def Position(self) -> int:
+        return int(self.tab.position * self.TIME_UNIT)
 
     @property
     def CanGoNext(self) -> bool:
         if not self.CanControl:
             return False
-        return True
+        return self.tab.can_go_next
 
     @property
     def CanGoPrevious(self) -> bool:
         if not self.CanControl:
             return False
-        return True
+        return self.tab.can_go_previous
 
     @property
     def CanPlay(self) -> bool:
         if not self.CanControl:
             return False
-        return True
+        return self.tab.can_play
 
     @property
     def CanPause(self) -> bool:
         if not self.CanControl:
             return False
-        return True
+        return self.tab.can_pause
 
     @property
     def CanSeek(self) -> bool:
         if not self.CanControl:
             return False
-        return True
+        return self.tab.can_seek
 
     @property
     def CanControl(self) -> bool:
-        return True
+        return self.tab.can_control
 
 class TrackInterface(MprisTrackInterface):
     def __init__(self, tab: MprisTab):
