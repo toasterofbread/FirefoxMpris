@@ -88,10 +88,11 @@ function sendMessage(message: any) {
 }
 
 function emitEvent(type: string, data: any) {
-	let object: any = {"type": type};
+	let object: any = {};
 	Object.keys(data).forEach(key => {
 		object[key] = data[key];
 	})
+	object.type = type;
 	sendMessage(object);
 }
 
@@ -109,10 +110,6 @@ async function onMessageReceived(message: any) {
 	}
 
 	switch (type) {
-		// case "log": {
-		//   console.log(message);
-		// }
-
 		case "play": {
 			await runCode(() => {
 				document.querySelector("video")?.play()
@@ -120,10 +117,10 @@ async function onMessageReceived(message: any) {
 			break;
 		}
 
-		case "get_status": {
+		case "update_tab": {
 			let result = await protocol?.getProperties();
 			result.tab = message.tab;
-			emitEvent("response", result);
+			emitEvent("update_tab", result);
 			break;
 		}
 
@@ -136,35 +133,52 @@ async function onMessageReceived(message: any) {
 			protocol?.callMethod(message.method, message.args);
 		}
 
+		case "mpris_set": {
+			protocol?.setProperty(message.property, message.value);
+		}
+
 		default: {
 			break;
 		}
 	}
 }
 
-async function onTabUpdated(tabId: number, changeInfo: any) {
+async function onTabUpdated(tabId: number, _changeInfo: any) {
 
-	emitEvent("tab_changed", {"tab": tabId, "url": changeInfo.url, supported: await getTabProtocol(await browser.tabs.get(tabId)) != null});
+	emitEvent("tab_changed", {
+		"tab": tabId, 
+		"url": (await browser.tabs.get(tabId)).url!,
+		supported: await getTabProtocol(await browser.tabs.get(tabId)) != null
+	});
 
 	runCode((tabId: number, extensionId: string, Properties: VProperties) => {
 		let video = document.querySelector("video");
-		if (!video) {
+		if (video == null || video.getAttribute("mpris-listeners-attached") == "true") {
 			return;
 		}
 
-		// Register video events
+		video.setAttribute("mpris-listeners-attached", "true");
+
 		video.addEventListener("pause", () => {
 			const video: HTMLMediaElement = document.querySelector("video")!;
 			let port = browser.runtime.connect({name: extensionId})
-			port.postMessage({key: Properties.STATUS, value: video.ended ? 0 : video.paused ? 1 : 2, tab: tabId});
+			port.postMessage({type: "set", key: Properties.STATUS, value: video.ended ? 0 : video.paused ? 1 : 2, tab: tabId});
 		})
 
 		video.addEventListener("play", () => {
 			const video: HTMLMediaElement = document.querySelector("video")!;
 			let port = browser.runtime.connect({name: extensionId})
-			port.postMessage({key: Properties.STATUS, value: video.ended ? 0 : video.paused ? 1 : 2, tab: tabId});
+			port.postMessage({type: "set", key: Properties.STATUS, value: video.ended ? 0 : video.paused ? 1 : 2, tab: tabId});
 		})
 
+		var target = document.querySelector('head > title')!;
+		var observer = new window.MutationObserver((mutations: any) => {
+			mutations.forEach((mutation: any) => {
+				let port = browser.runtime.connect({name: extensionId})
+				port.postMessage({type: "reload"});
+			});
+		});
+		observer.observe(target, { subtree: true, characterData: true, childList: true });
 	}, tabId, [tabId, browser.runtime.id, VideoProperties])
 }
 
@@ -174,7 +188,15 @@ function onTabDeleted(tabId: number) {
 
 function onTabConnected(port: browser.runtime.Port) {
 	port.onMessage.addListener((event: any) => {
-		emitEvent("property_changed", event);
+		switch (event.type) {
+			case "set": {
+				emitEvent("property_changed", event);
+				break;
+			}
+			case "reload": {
+				onTabUpdated(port.sender?.tab?.id!, null)
+			}
+		}
 	})
 }
 

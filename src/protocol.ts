@@ -57,6 +57,17 @@ export class Protocol {
         current[VideoProperties.DESKTOPENTRY] = ""; // TODO
         current[VideoProperties.SUPPORTEDURISCHEMES] = ["file"];
         current[VideoProperties.SUPPORTEDMIMETYPES] = ["audio/mpeg", "application/ogg", "video/mpeg"];
+
+        current[VideoProperties.CAN_PLAY] = await this.CanPlay();
+        current[VideoProperties.CAN_PAUSE] = await this.CanPause();
+        current[VideoProperties.CAN_SEEK] = await this.CanSeek();
+        current[VideoProperties.CAN_CONTROL] = await this.CanControl();
+
+        current[VideoProperties.CAN_GO_NEXT] = await this.CanGoNext();
+        current[VideoProperties.CAN_GO_PREVIOUS] = await this.CanGoPrevious();
+
+        current[VideoProperties.CANSETFULLSCREEN] = await this.CanSetFullscreen();
+
         return current;
     }
 
@@ -79,7 +90,7 @@ export class Protocol {
     }
 
     protected async Seek(offset: number): Promise<void> {}
-    protected async SetPosition(track_id: string, value: number): Promise<void> {}
+    protected async SetPosition(track_id: string, position: number): Promise<void> {}
     protected async OpenUri(uri: string): Promise<void> {}
 
     protected async PlayPause(): Promise<void> {}
@@ -94,6 +105,14 @@ export class Protocol {
     protected async SetPlaybackRate(value: number): Promise<void> {}
     protected async SetShuffle(value: boolean): Promise<void> {}
     protected async SetVolume(value: number): Promise<void> {}
+
+    protected async CanPlay(): Promise<boolean> { return false; }
+    protected async CanPause(): Promise<boolean> { return false; }
+    protected async CanSeek(): Promise<boolean> { return false; }
+    protected async CanControl(): Promise<boolean> { return false; }
+    protected async CanGoNext(): Promise<boolean> { return false; }
+    protected async CanGoPrevious(): Promise<boolean> { return false; }
+    protected async CanSetFullscreen(): Promise<boolean> { return false; }
 }
 
 export class VideoProtocol extends Protocol {
@@ -130,12 +149,6 @@ export class VideoProtocol extends Protocol {
             current[props.PLAYBACK_RATE] = video.playbackRate;
             current[props.DURATION] = video.duration;
             current[props.URL] = document.URL;
-            current[props.CANSETFULLSCREEN] = true;
-        
-            current[props.CAN_PLAY] = true;
-            current[props.CAN_PAUSE] = true;
-            current[props.CAN_SEEK] = true;
-            current[props.CAN_CONTROL] = true;
             
             return current;
         
@@ -168,8 +181,82 @@ export class VideoProtocol extends Protocol {
         })
     }
 
-    protected async Stop(): Promise<void> {
+    public async Stop(): Promise<void> {
         return this.Pause();
     }
 
+    public async Seek(offset: number): Promise<void> {
+        const go_next: boolean = await this.runCode((offset: number) => {
+            const video: HTMLVideoElement = document.querySelector("video")!;
+            const target: number = Math.max(0, video.currentTime + offset);
+
+            if (target > video.duration) {
+                return true;
+            }
+
+            video.currentTime = target;
+            return false;
+        }, [offset])
+
+        if (go_next) {
+            return this.Next();
+        }
+    }
+    
+    public async SetPosition(_track_id: string, position: number): Promise<void> {
+
+        if (position < 0 || !(await this.CanSeek())) {
+            return;
+        }
+        
+        return this.runCode((position: number) => {
+            const video: HTMLVideoElement = document.querySelector("video")!;
+            if (position > video.duration) {
+                return;
+            }
+            video.currentTime = position;
+        }, [position]);
+    }
+
+    public async SetFullscreen(value: boolean): Promise<void> {
+
+        if (!(await this.CanSetFullscreen())) {
+            return;
+        }
+
+        return this.runCode((fullscreen: boolean) => {
+            if (!document.fullscreenEnabled) {
+                return;
+            }
+
+            const video: HTMLVideoElement = document.querySelector("video")!;
+            if (fullscreen) {
+                video.requestFullscreen()
+            }
+            else {
+                document.exitFullscreen();
+            }
+        }, [value]);
+    }
+
+    public async CanPlay(): Promise<boolean> {
+        return true;
+    }
+
+    public async CanPause(): Promise<boolean> {
+        return true;
+    }
+
+    public async CanSeek(): Promise<boolean> {
+        return true;
+    }
+
+    public async CanControl(): Promise<boolean> {
+        return true;
+    }
+
+    public async CanSetFullscreen(): Promise<boolean> { 
+        return true;
+    }
+    
 }

@@ -21,7 +21,7 @@ export class YoutubeProtocol extends VideoProtocol {
         current = await super.getProperties(current);
         return await this.runCode(async (current: any, props: typeof VideoProperties) => {
 
-            const channel: HTMLAnchorElement | null | undefined = document.querySelector(".style-scope ytd-channel-name")?.querySelector("a");
+            const channel: HTMLAnchorElement | null | undefined = document.querySelector("[id='primary-inner']")?.querySelector(".style-scope ytd-channel-name")?.querySelector("a");
             const video_url = new URL(document.URL);
             const video_id = video_url.searchParams.get("v");
 
@@ -38,12 +38,6 @@ export class YoutubeProtocol extends VideoProtocol {
                 playlist_id: video_url.searchParams.get("list") || undefined
             })];
             current[props.IDENTITY] = "YouTube";
-
-            const next_btn = document.querySelector(".ytp-next-button");
-            current[props.CAN_GO_NEXT] = next_btn?.getAttribute("aria-disabled") == "false";
-
-            const prev_btn = document.querySelector(".ytp-prev-button");
-            current[props.CAN_GO_PREVIOUS] = prev_btn?.getAttribute("aria-disabled") == "false";
 
             const playlist_items = document.querySelector("ytd-playlist-panel-renderer.style-scope.ytd-watch-flexy[id='playlist'] div[id='items']");
             
@@ -91,9 +85,25 @@ export class YoutubeProtocol extends VideoProtocol {
 
     public async Previous(): Promise<void> {
         return this.runCode(() => {
-            const prev_btn: HTMLElement | null = document.querySelector(".ytp-prev-button");
-            prev_btn?.click();
+            document.querySelector("video")!.currentTime = 0;
+            setTimeout((url: string) => {
+                if (url == document.URL) {
+                    const prev_btn: HTMLElement | null = document.querySelector(".ytp-prev-button");
+                    prev_btn?.click();
+                }
+            }, 100, [document.URL])
         })
     }
 
+    public async CanGoNext(): Promise<boolean> {
+        return this.runCode(() => {
+            return document.querySelector(".ytp-next-button")?.getAttribute("aria-disabled") == "false";
+        });
+    }
+
+    public async CanGoPrevious(): Promise<boolean> {
+        return this.runCode(() => {
+            return document.querySelector(".ytp-prev-button")?.getAttribute("aria-disabled") == "false";
+        });
+    }
 }

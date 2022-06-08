@@ -22,7 +22,7 @@ class MprisTab(MprisServer, MprisMainInterface):
         "loop": [bool, "LoopStatus"],
         "is_playlist": [bool, "LoopStatus"],
         "shuffle": [bool, "Shuffle"],
-        "volume": [float, "Volume"],
+        "volume": [float | int, "Volume"],
         "position": [float | int, "Position"],
         "playback_rate": [float | int, "Rate"],
 
@@ -79,7 +79,7 @@ class PlayerInterface(MprisPlayerInterface):
     def Metadata(self) -> dict:
         ret = {
             "mpris:trackid": self.tab.track_id,
-            "mpris:length": self.tab.duration * self.TIME_UNIT,
+            "mpris:length": None if self.tab.duration is None else (self.tab.duration * self.TIME_UNIT),
             "mpris:artUrl": self.tab.art_url,
             "xesam:url": self.tab.url,
             "xesam:title": self.tab.title,
@@ -127,12 +127,12 @@ class PlayerInterface(MprisPlayerInterface):
     def Seek(self, offset: int):
         if not self.CanSeek:
             return
-        self.tab.callMethod(name(), [offset])
+        self.tab.callMethod(name(), [offset / self.TIME_UNIT])
 
     def SetPosition(self, track_id: str, position: int):
         if not self.CanSeek:
             return
-        self.tab.callMethod(name(), [track_id, position])
+        self.tab.callMethod(name(), [track_id, position / self.TIME_UNIT])
 
     def OpenUri(self, uri: str):
         if not self.CanControl:
@@ -141,8 +141,7 @@ class PlayerInterface(MprisPlayerInterface):
 
     @property
     def PlaybackStatus(self) -> str: # -> "Playing" | "Paused" | "Stopped"
-        # return ("Stopped", "Paused", "Playing")[self.tab.status]
-        return "Playing"
+        return ("Stopped", "Paused", "Playing")[self.tab.status]
 
     @property
     def LoopStatus(self) -> str: # -> "Track" | "Playlist" | "None"
