@@ -21,13 +21,15 @@ export class YoutubeProtocol extends VideoProtocol {
         current = await super.getProperties(current);
         return await this.runCode(async (current: any, props: typeof VideoProperties) => {
 
-            const channel: HTMLAnchorElement | null | undefined = document.querySelector("[id='primary-inner']")?.querySelector(".style-scope ytd-channel-name")?.querySelector("a");
+            const primary_inner: HTMLElement | null = document.querySelector("[id='primary-inner']");
+            const title: HTMLElement | null | undefined = primary_inner?.querySelector(".title")?.querySelector("yt-formatted-string");
+            const channel: HTMLAnchorElement | null | undefined = primary_inner?.querySelector(".style-scope ytd-channel-name")?.querySelector("a");
             const video_url = new URL(document.URL);
             const video_id = video_url.searchParams.get("v");
 
             current[props.SHUFFLE] = false;
             current[props.ART_URL] = `https://img.youtube.com/vi/${video_id}/mqdefault.jpg`;
-            current[props.TITLE] = document.title;
+            current[props.TITLE] = title?.textContent || "none";
             current[props.ALBUM_NAME] = null;
             current[props.DISC_NUMBER] = null;
             current[props.TRACK_NUMBER] = null;
